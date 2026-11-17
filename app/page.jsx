@@ -34,7 +34,7 @@ export default function Page() {
   const [name, setName] = useState('');
   const [codeIn, setCodeIn] = useState('');
   const [busy, setBusy] = useState(false);
-  const vRef = useRef(0), callsRef = useRef(null), roundRef = useRef(null), voiceRef = useRef(true);
+  const vRef = useRef(0), callsRef = useRef(null), roundRef = useRef(null), voiceRef = useRef(true), endedRef = useRef(false);
 
   useEffect(() => {
     try { setMe(JSON.parse(localStorage.housie || 'null')); } catch {}
@@ -60,15 +60,20 @@ export default function Page() {
       roundRef.current = r.round;
       if (callsRef.current !== null && r.called.length > callsRef.current && voiceRef.current) speak(r.called.at(-1));
       callsRef.current = r.called.length;
+      endedRef.current = r.ended;
       setS(r);
     } catch {}
   }, [me]);
 
   useEffect(() => {
     if (!me) return;
-    poll();
-    const t = setInterval(poll, 2000);
-    return () => clearInterval(t);
+    let t, dead = false;
+    // Poll every 3 s (8 s once the game is over) and pause while the tab is hidden, to save Redis commands.
+    const loop = async () => { if (dead) return; if (!document.hidden) await poll(); t = setTimeout(loop, endedRef.current ? 8000 : 3000); };
+    const wake = () => { if (!document.hidden) poll(); };
+    loop();
+    document.addEventListener('visibilitychange', wake);
+    return () => { dead = true; clearTimeout(t); document.removeEventListener('visibilitychange', wake); };
   }, [me, poll]);
 
   const act = async (action, extra = {}) => {
